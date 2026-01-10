@@ -1,104 +1,47 @@
-package paymentprocessor
+package helpers
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// PaymentError represents an error that occurs during payment processing
-type PaymentError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+func GenerateUUID() string {
+	return uuid.New().String()
 }
 
-// Error returns the error message
-func (e *PaymentError) Error() string {
-	return e.Message
+func GetCurrentTime() time.Time {
+	return time.Now().UTC()
 }
 
-// NewPaymentError returns a new PaymentError instance
-func NewPaymentError(code int, message string) error {
-	return &PaymentError{Code: code, Message: message}
-}
-
-// PaymentRequest represents a payment request
-type PaymentRequest struct {
-	ID        string  `json:"id"`
-	Amount    float64 `json:"amount"`
-	Currency  string  `json:"currency"`
-	CardNumber string `json:"card_number"`
-	Expiry    string  `json:"expiry"`
-	CVV       string  `json:"cvv"`
-}
-
-// Validate checks if the payment request is valid
-func (pr *PaymentRequest) Validate() error {
-	if pr.Amount <= 0 {
-		return NewPaymentError(400, "invalid amount")
-	}
-	if len(pr.CardNumber) != 16 {
-		return NewPaymentError(400, "invalid card number")
-	}
-	if len(pr.Expiry) != 5 {
-		return NewPaymentError(400, "invalid expiry date")
-	}
-	if len(pr.CVV) != 3 {
-		return NewPaymentError(400, "invalid cvv")
+func ParseJSON(body []byte, target interface{}) error {
+	if err := json.Unmarshal(body, target); err != nil {
+		return fmt.Errorf("failed to parse json: %w", err)
 	}
 	return nil
 }
 
-// ProcessPayment processes a payment request
-func ProcessPayment(w http.ResponseWriter, r *http.Request) {
-	var paymentRequest PaymentRequest
-	err := json.NewDecoder(r.Body).Decode(&paymentRequest)
+func HandleError(err error, w http.ResponseWriter) {
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	err = paymentRequest.Validate()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	paymentID := uuid.New().String()
-	log.Printf("processing payment %s\n", paymentID)
-	// simulate payment processing time
-	time.Sleep(2 * time.Second)
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"payment_id": paymentID})
-}
-
-// GetPaymentStatus returns the status of a payment
-func GetPaymentStatus(w http.ResponseWriter, r *http.Request) {
-	paymentID := r.URL.Query().Get("payment_id")
-	if paymentID == "" {
-		http.Error(w, "payment id is required", http.StatusBadRequest)
-		return
-	}
-	// simulate database query to get payment status
-	status := "success"
-	if status == "success" {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": status})
-	} else {
-		w.WriteHeader(http.StatusFailedDependency)
-		json.NewEncoder(w).Encode(map[string]string{"status": status})
-	}
-}
-
-// HandlePaymentError handles payment errors
-func HandlePaymentError(w http.ResponseWriter, err error) {
-	paymentError, ok := err.(*PaymentError)
-	if !ok {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		log.Printf("error: %v\n", err)
 	}
-	http.Error(w, paymentError.Message, paymentError.Code)
+}
+
+func ValidateRequest(r *http.Request) error {
+	if r == nil {
+		return errors.New("request is nil")
+	}
+	if r.Method != http.MethodPost {
+		return errors.New("only POST requests are allowed")
+	}
+	if r.Header.Get("Content-Type") != "application/json" {
+		return errors.New("invalid content type")
+	}
+	return nil
 }
